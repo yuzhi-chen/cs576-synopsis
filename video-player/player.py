@@ -3,8 +3,8 @@ from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QHBoxLayout, QVB
 import sys
 from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
 from PyQt5.QtMultimediaWidgets import QVideoWidget
-from PyQt5.QtGui import QIcon, QPalette
-from PyQt5.QtCore import Qt, QUrl
+from PyQt5.QtGui import QIcon, QPalette, QPixmap
+from PyQt5.QtCore import Qt, QUrl, pyqtSignal
 import os
 import subprocess
 
@@ -54,7 +54,6 @@ class Window(QWidget):
         self.slider.sliderMoved.connect(self.set_position)
 
 
-
         #create label
         self.label = QLabel()
         self.label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
@@ -62,13 +61,22 @@ class Window(QWidget):
 
         #create hbox layout
         hboxLayout = QHBoxLayout()
-        hboxLayout.setContentsMargins(0,0,0,0)
+        hboxLayout.setContentsMargins(0, 0, 0, 0)
 
         #set widgets to the hbox layout
         hboxLayout.addWidget(openBtn)
         hboxLayout.addWidget(self.playBtn)
         hboxLayout.addWidget(self.slider)
 
+        synopImageLayout = QHBoxLayout()
+        synopImageLayout.setContentsMargins(1, 1, 1, 1)
+        image1 = ClickLabel()
+        pixmap = QPixmap('../test.jpg')
+        image1.setPixmap(pixmap)
+        image1.setFixedSize(100, 50)
+
+        image1.clicked.connect(self.synopsis_click_handler)
+        synopImageLayout.addWidget(image1)
 
 
         #create vbox layout
@@ -76,7 +84,7 @@ class Window(QWidget):
         vboxLayout.addWidget(videowidget)
         vboxLayout.addLayout(hboxLayout)
         vboxLayout.addWidget(self.label)
-
+        vboxLayout.addLayout(synopImageLayout)
 
         self.setLayout(vboxLayout)
 
@@ -142,17 +150,24 @@ class Window(QWidget):
         self.playBtn.setEnabled(False)
         self.label.setText("Error: " + self.mediaPlayer.errorString())
 
+    def synopsis_click_handler(self):
+        self.mediaPlayer.setPosition(0)
+
 
 def convert_avi_to_mp4(input_file, output_name):
     cmd = "ffmpeg -i '{input}' -ac 2 -b:v 2000k -c:a aac -c:v libx264 -b:a 160k -vprofile high -bf 0 -strict experimental -f mp4 '{output}'".format(input=input_file, output=output_name)
     p = subprocess.Popen(cmd, shell=True)
     p.wait()
-    # p = os.popen("ffmpeg -i '{input}' -ac 2 -b:v 2000k -c:a aac -c:v libx264 -b:a 160k -vprofile high -bf 0 -strict "
-    #          "experimental -f mp4 '{output}'".format(input=input_file, output=output_name))
-    # print("Happens while running")
-    # p.communicate()
 
 
-app = QApplication(sys.argv);
+class ClickLabel(QLabel):
+    clicked = pyqtSignal()
+
+    def mousePressEvent(self, event):
+        self.clicked.emit()
+        QLabel.mousePressEvent(self, event)
+
+
+app = QApplication(sys.argv)
 window = Window()
 sys.exit(app.exec_())
