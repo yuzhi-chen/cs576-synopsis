@@ -17,7 +17,7 @@ class Window(QWidget):
         super().__init__()
 
         self.setWindowTitle("PyQt5 Media Player")
-        self.setGeometry(0, 0, 700, 700)
+        self.setGeometry(0, 0, 700, 600)
         self.setWindowIcon(QIcon('player.png'))
 
         p = self.palette()
@@ -27,6 +27,7 @@ class Window(QWidget):
         self.show()
         self.audio_process = False
         self.position = 0
+        self.filename = '.'
 
     def init_ui(self):
         #create media player object
@@ -35,8 +36,12 @@ class Window(QWidget):
 
         #create videowidget object
 
+        videoHboxLayout = QHBoxLayout()
         videowidget = QVideoWidget()
-
+        videowidget.setFixedHeight(300)
+        videoHboxLayout.addWidget(videowidget)
+        videoHboxLayout.setContentsMargins(0, 0, 0, 0)
+        videoHboxLayout.setSpacing(0)
 
         #create open button
         openBtn = QPushButton('Open Video')
@@ -51,11 +56,10 @@ class Window(QWidget):
         self.playBtn.clicked.connect(self.play_video)
 
 
-
-        #create slider
-        self.slider = QSlider(Qt.Horizontal)
-        self.slider.setRange(0,0)
-        self.slider.sliderMoved.connect(self.set_position)
+        self.stopBtn = QPushButton()
+        self.stopBtn.setEnabled(False)
+        self.stopBtn.setIcon(self.style().standardIcon(QStyle.SP_MediaStop))
+        self.stopBtn.clicked.connect(self.reset_video)
 
 
         #create label
@@ -70,12 +74,13 @@ class Window(QWidget):
         #set widgets to the hbox layout
         hboxLayout.addWidget(openBtn)
         hboxLayout.addWidget(self.playBtn)
-        hboxLayout.addWidget(self.slider)
+        hboxLayout.addWidget(self.stopBtn)
 
-        synopImageLayout = QHBoxLayout()
-        synopImageLayout.setContentsMargins(1, 0.5, 1, 0.5)
+        synopLayout = QVBoxLayout()
+        synopLayout.setContentsMargins(0, 0, 0, 0)
+        synopLayout.setSpacing(0)
+        self.generate_synopsis(synopLayout)
 
-        self.generate_synopsis(synopImageLayout)
         # image1 = ClickLabel()
         # pixmap = QPixmap('../test.jpg')
         # image1.setPixmap(pixmap)
@@ -87,10 +92,10 @@ class Window(QWidget):
 
         #create vbox layout
         vboxLayout = QVBoxLayout()
-        vboxLayout.addWidget(videowidget)
+        vboxLayout.addLayout(videoHboxLayout)
         vboxLayout.addLayout(hboxLayout)
         vboxLayout.addWidget(self.label)
-        vboxLayout.addLayout(synopImageLayout)
+        vboxLayout.addLayout(synopLayout)
 
         self.setLayout(vboxLayout)
 
@@ -101,28 +106,62 @@ class Window(QWidget):
 
         self.mediaPlayer.stateChanged.connect(self.mediastate_changed)
         self.mediaPlayer.positionChanged.connect(self.position_changed)
-        self.mediaPlayer.durationChanged.connect(self.duration_changed)
 
-    def generate_synopsis(self, synopImageLayout):
+    def generate_synopsis(self, synopLayout):
+
         frame_folder = os.path.join(parent_dir, 'keyframes')
         image_dir = os.listdir(frame_folder)
         image_dir.remove('.gitignore')
-        image_dir.sort(key=lambda img: (int(img.split('_')[1].split('.')[0])))
+        image_dir.remove('.DS_Store')
+        image_dir.sort(key=lambda img: (int(img.split('_')[0][-1])*10000+int(img.split('_')[1].split('.')[0])))
         images = [image for image in image_dir]
+        count = 0
+
+        synopImageLayout = QHBoxLayout()
+        synopImageLayout.setContentsMargins(0, 0, 0, 0)
+        synopImageLayout.setSpacing(0)
+
+
         for imageName in images:
             # frame_time = int(imageName.split('_')[1].split('.')[0])
+            video_no = int(imageName.split('_')[0][-1])
             timestamp = (int(imageName.split('_')[1].split('.')[0]))
             image_label = ClickLabel()
             pixmap = QPixmap(os.path.join(parent_dir, 'keyframes', imageName))\
-                .scaled(100, 70, Qt.KeepAspectRatio, Qt.FastTransformation)
+                .scaled(44, 36, Qt.KeepAspectRatio, Qt.FastTransformation)
             image_label.setPixmap(pixmap)
-            image_label.clicked.connect(lambda t=timestamp: self.synopsis_click_handler(t))
+            image_label.clicked.connect(lambda t=timestamp, n=video_no: self.synopsis_click_handler(t, n))
             synopImageLayout.addWidget(image_label)
+            count += 1
+            if count == 17:
+                synopLayout.addLayout(synopImageLayout)
+                synopImageLayout = QHBoxLayout()
+                synopImageLayout.setContentsMargins(0, 0, 0, 0)
+                synopImageLayout.setSpacing(0)
+                count = 0
 
+    def open_video_file(self, filename):
+        path = os.path.join(parent_dir, 'videos')
+        mp4_path = os.path.join(path, 'mp4')
+        avi_path = os.path.join(path, 'avi')
+        mp4_name = filename + '.mp4'
+        avi_name = filename + '.avi'
+        mp4_dir = os.listdir(mp4_path)
+        for mp4 in mp4_dir:
+            if mp4_name == mp4:
+                self.mediaPlayer.setMedia(QMediaContent(QUrl.fromLocalFile(os.path.join(mp4_path, mp4_name))))
+                self.stopBtn.setEnabled(True)
+                self.playBtn.setEnabled(True)
+                self.filename = mp4_name
+                return
 
+        convert_avi_to_mp4(os.path.join(avi_path, avi_name), os.path.join(mp4_path, mp4_name))
+        self.mediaPlayer.setMedia(QMediaContent(QUrl.fromLocalFile(os.path.join(mp4_path, mp4_name))))
+        self.playBtn.setEnabled(True)
+        self.stopBtn.setEnabled(True)
+        self.filename = mp4_name
 
     def open_file(self):
-
         filename, _ = QFileDialog.getOpenFileName(self, "Open Video")
         if os.path.splitext(filename)[1] == '.avi':
             output_name = os.path.dirname(filename) + '/output.mp4'
@@ -139,11 +178,19 @@ class Window(QWidget):
             self.mediaPlayer.pause()
             if self.audio_process:
                 self.audio_process.kill()
+                self.audio_process = False
 
         else:
             self.mediaPlayer.play()
-            self.create_audio_process('../videos/video1/audio.wav', self.position//1000)
+            self.create_audio_process('../videos/{filename}/audio.wav'.format(filename=self.filename.split('.')[0]),
+                                      self.position/1000)
 
+    def reset_video(self):
+        self.mediaPlayer.pause()
+        self.mediaPlayer.setPosition(0)
+        if self.audio_process:
+            self.audio_process.kill()
+            self.audio_process = False
 
     def mediastate_changed(self, state):
         if self.mediaPlayer.state() == QMediaPlayer.PlayingState:
@@ -157,12 +204,13 @@ class Window(QWidget):
             )
 
     def create_audio_process(self, filename, start_time):
+        if self.audio_process:
+            self.audio_process.kill()
         cmd = "python3 audio.py {filename} {start}".format(filename=filename, start=start_time)
         self.audio_process = subprocess.Popen(cmd, shell=True)
 
 
     def position_changed(self, position):
-        self.slider.setValue(position)
         self.position = position
 
 
@@ -178,14 +226,22 @@ class Window(QWidget):
         self.playBtn.setEnabled(False)
         self.label.setText("Error: " + self.mediaPlayer.errorString())
 
-    def synopsis_click_handler(self, frame):
-        time = frame/30*1000
-        self.slider.setValue(time)
-        self.mediaPlayer.setPosition(time)
+    def synopsis_click_handler(self, frame, video_no):
+        print(frame)
+        new_filename = 'video'+str(video_no)
+        if self.filename.split('.')[0] != new_filename:
+            self.open_video_file(new_filename)
 
+        time = frame/30*1000
+        self.mediaPlayer.setPosition(time)
+        self.position = time
+        if self.mediaPlayer.state() == QMediaPlayer.PlayingState:
+            self.play_video()
+
+        # wav_path = os.path.join(os.path.join(parent_dir, 'videos'), new_filename)
+        # self.create_audio_process(os.path.join(wav_path, 'audio.wav'), self.position//1000)
 
 def audio_play(audio_player, start_time):
-    print(audio_player.spf.getframerate())
     audio_player.play(start_time)
 
 
