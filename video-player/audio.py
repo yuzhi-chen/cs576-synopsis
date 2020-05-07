@@ -44,4 +44,4 @@ class AudioPlayer:
 filename = sys.argv[1]
 start_time = float(sys.argv[2])
 audio_player = AudioPlayer(filename)
-audio_player.play(start_time)
+audio_player.play(start_time+0.3)

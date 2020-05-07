@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QHBoxLayout, QVB
 import sys
 from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
 from PyQt5.QtMultimediaWidgets import QVideoWidget
-from PyQt5.QtGui import QIcon, QPalette, QPixmap
+from PyQt5.QtGui import QIcon, QPalette, QPixmap, QBrush
 from PyQt5.QtCore import Qt, QUrl, pyqtSignal, QSignalMapper
 import os
 import subprocess
@@ -37,9 +37,16 @@ class Window(QWidget):
         #create videowidget object
 
         videoHboxLayout = QHBoxLayout()
-        videowidget = QVideoWidget()
-        videowidget.setFixedHeight(300)
-        videoHboxLayout.addWidget(videowidget)
+        self.videowidget = QVideoWidget()
+        self.videowidget.setFixedHeight(300)
+        self.videowidget.setFixedWidth(352)
+
+        self.imagewidget = QLabel()
+        self.imagewidget.setFixedWidth(352)
+        self.imagewidget.setFixedHeight(300)
+
+        videoHboxLayout.addWidget(self.videowidget)
+        videoHboxLayout.addWidget(self.imagewidget)
         videoHboxLayout.setContentsMargins(0, 0, 0, 0)
         videoHboxLayout.setSpacing(0)
 
@@ -79,7 +86,9 @@ class Window(QWidget):
         synopLayout = QVBoxLayout()
         synopLayout.setContentsMargins(0, 0, 0, 0)
         synopLayout.setSpacing(0)
-        self.generate_synopsis(synopLayout)
+        self.generate_synopsis_video(synopLayout)
+        self.generate_synopsis_image(synopLayout)
+
 
         # image1 = ClickLabel()
         # pixmap = QPixmap('../test.jpg')
@@ -99,15 +108,20 @@ class Window(QWidget):
 
         self.setLayout(vboxLayout)
 
-        self.mediaPlayer.setVideoOutput(videowidget)
+        self.mediaPlayer.setVideoOutput(self.videowidget)
 
+        pal = self.palette()
+        pal.setBrush(QPalette.Window, QBrush(QPixmap("../keyimages/1.png")));
+        self.videowidget.setPalette(pal)
 
         #media player signals
 
         self.mediaPlayer.stateChanged.connect(self.mediastate_changed)
         self.mediaPlayer.positionChanged.connect(self.position_changed)
 
-    def generate_synopsis(self, synopLayout):
+        self.imagewidget.hide()
+
+    def generate_synopsis_video(self, synopLayout):
 
         frame_folder = os.path.join(parent_dir, 'keyframes')
         image_dir = os.listdir(frame_folder)
@@ -120,7 +134,6 @@ class Window(QWidget):
         synopImageLayout = QHBoxLayout()
         synopImageLayout.setContentsMargins(0, 0, 0, 0)
         synopImageLayout.setSpacing(0)
-
 
         for imageName in images:
             # frame_time = int(imageName.split('_')[1].split('.')[0])
@@ -139,6 +152,38 @@ class Window(QWidget):
                 synopImageLayout.setContentsMargins(0, 0, 0, 0)
                 synopImageLayout.setSpacing(0)
                 count = 0
+
+    def generate_synopsis_image(self, synopLayout):
+        image_folder = os.path.join(parent_dir, 'keyimages')
+        image_dir = os.listdir(image_folder)
+        image_dir.remove('.DS_Store')
+        image_dir.sort(key=lambda img: int(img.split('.')[0]))
+        images = [image for image in image_dir]
+        count = 0
+        rowcount = 0
+        synopImageLayout = QHBoxLayout()
+        synopImageLayout.setContentsMargins(0, 0, 0, 0)
+        synopImageLayout.setSpacing(0)
+        for imageName in images:
+            image_no = int(imageName.split('.')[0])
+            image_label = ClickLabel()
+            pixmap = QPixmap(os.path.join(image_folder, imageName)) \
+                .scaled(44, 36, Qt.KeepAspectRatio, Qt.FastTransformation)
+            image_label.setPixmap(pixmap)
+            image_label.clicked.connect(lambda filename=os.path.join(image_folder, imageName):
+                                        self.image_synopsis_click_handler(filename))
+            synopImageLayout.addWidget(image_label)
+            count += 1
+            if count == 17:
+                synopLayout.addLayout(synopImageLayout)
+                rowcount += 1
+                if rowcount > 3:
+                    return
+                synopImageLayout = QHBoxLayout()
+                synopImageLayout.setContentsMargins(0, 0, 0, 0)
+                synopImageLayout.setSpacing(0)
+                count = 0
+
 
     def open_video_file(self, filename):
         path = os.path.join(parent_dir, 'videos')
@@ -226,8 +271,24 @@ class Window(QWidget):
         self.playBtn.setEnabled(False)
         self.label.setText("Error: " + self.mediaPlayer.errorString())
 
+    def stop_video(self):
+        if self.mediaPlayer.state() == QMediaPlayer.PlayingState:
+            self.play_video()
+
+    def image_synopsis_click_handler(self, filename):
+        self.imagewidget.show()
+        self.videowidget.hide()
+        self.stop_video()
+        self.playBtn.setEnabled(False)
+        self.stopBtn.setEnabled(False)
+        pixmap = QPixmap(filename)
+        self.imagewidget.setPixmap(pixmap)
+
     def synopsis_click_handler(self, frame, video_no):
-        print(frame)
+        self.imagewidget.hide()
+        self.videowidget.show()
+        self.playBtn.setEnabled(True)
+        self.stopBtn.setEnabled(True)
         new_filename = 'video'+str(video_no)
         if self.filename.split('.')[0] != new_filename:
             self.open_video_file(new_filename)
@@ -235,9 +296,7 @@ class Window(QWidget):
         time = frame/30*1000
         self.mediaPlayer.setPosition(time)
         self.position = time
-        if self.mediaPlayer.state() == QMediaPlayer.PlayingState:
-            self.play_video()
-
+        self.stop_video()
         # wav_path = os.path.join(os.path.join(parent_dir, 'videos'), new_filename)
         # self.create_audio_process(os.path.join(wav_path, 'audio.wav'), self.position//1000)
 
