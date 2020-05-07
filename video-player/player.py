@@ -9,7 +9,6 @@ import os
 import subprocess
 from pathlib import Path
 
-
 dirname = os.path.dirname(__file__)
 parent_dir = Path(__file__).parent.parent
 
@@ -24,10 +23,10 @@ class Window(QWidget):
         p = self.palette()
         p.setColor(QPalette.Window, Qt.black)
         self.setPalette(p)
-
         self.init_ui()
-
         self.show()
+        self.audio_process = False
+        self.position = 0
 
     def init_ui(self):
         #create media player object
@@ -111,7 +110,6 @@ class Window(QWidget):
         image_dir.sort(key=lambda img: (int(img.split('_')[1].split('.')[0])))
         images = [image for image in image_dir]
         for imageName in images:
-            print(imageName)
             # frame_time = int(imageName.split('_')[1].split('.')[0])
             timestamp = (int(imageName.split('_')[1].split('.')[0]))
             image_label = ClickLabel()
@@ -128,7 +126,6 @@ class Window(QWidget):
         filename, _ = QFileDialog.getOpenFileName(self, "Open Video")
         if os.path.splitext(filename)[1] == '.avi':
             output_name = os.path.dirname(filename) + '/output.mp4'
-            print(output_name)
             convert_avi_to_mp4(filename, output_name)
             self.mediaPlayer.setMedia(QMediaContent(QUrl.fromLocalFile(output_name)))
             self.playBtn.setEnabled(True)
@@ -137,13 +134,15 @@ class Window(QWidget):
             self.mediaPlayer.setMedia(QMediaContent(QUrl.fromLocalFile(filename)))
             self.playBtn.setEnabled(True)
 
-
     def play_video(self):
         if self.mediaPlayer.state() == QMediaPlayer.PlayingState:
             self.mediaPlayer.pause()
+            if self.audio_process:
+                self.audio_process.kill()
 
         else:
             self.mediaPlayer.play()
+            self.create_audio_process('../videos/video1/audio.wav', self.position//1000)
 
 
     def mediastate_changed(self, state):
@@ -157,9 +156,14 @@ class Window(QWidget):
                 self.style().standardIcon(QStyle.SP_MediaPlay)
             )
 
+    def create_audio_process(self, filename, start_time):
+        cmd = "python3 audio.py {filename} {start}".format(filename=filename, start=start_time)
+        self.audio_process = subprocess.Popen(cmd, shell=True)
+
+
     def position_changed(self, position):
-        print(position)
         self.slider.setValue(position)
+        self.position = position
 
 
     def duration_changed(self, duration):
@@ -167,8 +171,8 @@ class Window(QWidget):
 
 
     def set_position(self, position):
+        self.play_video()
         self.mediaPlayer.setPosition(position)
-
 
     def handle_errors(self):
         self.playBtn.setEnabled(False)
@@ -178,6 +182,11 @@ class Window(QWidget):
         time = frame/30*1000
         self.slider.setValue(time)
         self.mediaPlayer.setPosition(time)
+
+
+def audio_play(audio_player, start_time):
+    print(audio_player.spf.getframerate())
+    audio_player.play(start_time)
 
 
 def convert_avi_to_mp4(input_file, output_name):
@@ -194,5 +203,11 @@ class ClickLabel(QLabel):
 
 
 app = QApplication(sys.argv)
+
+# audio_player = AudioPlayer(filename)
+# self.p = multiprocessing.Process(target=audio_play, args=(audio_player, start_time))
+# self.p.start()
+# self.p.join()
+
 window = Window()
 sys.exit(app.exec_())
